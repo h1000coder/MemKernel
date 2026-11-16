@@ -1,0 +1,78 @@
+name: build-memkernel-gki
+
+on:
+  workflow_dispatch:
+    inputs:
+      ddk_release:
+        description: 'DDK image tag suffix (release date)'
+        required: false
+        default: '20251104'
+        type: string
+
+jobs:
+  build:
+    name: build ${{ matrix.kmi }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        kmi:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+
+    container:
+      image: ghcr.io/ylarod/ddk:${{ matrix.kmi }}-${{ inputs.ddk_release || '20251104' }}
+      options: --privileged
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show build environment
+        run: |
+          echo "=== KMI:        ${{ matrix.kmi }}"
+          echo "=== KERNEL_SRC: $KERNEL_SRC"
+          clang --version || true
+
+      - name: Patch device name (setup.sh M liberdade equivalent)
+        run: |
+          sed -i 's/#define DEVICE_NAME ".*"/#define DEVICE_NAME "liberdade"/' kernel/entry.c
+          sed -i 's/memkernel\.o/liberdade_memk.o/g'   kernel/Makefile
+          sed -i 's/memkernel-y/liberdade_memk-y/g'    kernel/Makefile
+          echo "--- entry.c device name ---"
+          grep DEVICE_NAME kernel/entry.c
+          echo "--- Makefile ---"
+          cat kernel/Makefile
+
+      - name: Build liberdade_memk.ko
+        run: |
+          make -C "$KERNEL_SRC" \
+            M="$GITHUB_WORKSPACE/kernel" \
+            ARCH=arm64 \
+            CONFIG_MEMKERNEL=m \
+            -j$(nproc)
+          ls -la kernel/liberdade_memk.ko
+          strings kernel/liberdade_memk.ko | grep vermagic
+
+      - name: Stage artifact
+        run: |
+          mkdir -p out
+          cp kernel/liberdade_memk.ko "out/memkernel-${{ matrix.kmi }}.ko"
+          if command -v llvm-strip >/dev/null 2>&1; then
+            llvm-strip -d "out/memkernel-${{ matrix.kmi }}.ko"
+            echo "stripped OK"
+          fi
+          ls -la out/
+
+      - name: Upload memkernel-${{ matrix.kmi }}.ko
+        uses: actions/upload-artifact@v4
+        with:
+          name: memkernel-${{ matrix.kmi }}.ko
+          path: out/memkernel-${{ matrix.kmi }}.ko
+          if-no-files-found: error
+          retention-days: 30
