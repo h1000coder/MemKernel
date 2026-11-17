@@ -1,7 +1,11 @@
 ifneq ($(KERNELRELEASE),)
 # kbuild part of makefile
 	obj-$(CONFIG_MEMKERNEL)  := memkernel.o
-	memkernel-y := memory.o process.o entry.o
+	memkernel-y := memory.o process.o entry.o resolve.o
+
+	# -fno-stack-protector: evita dependência de __stack_chk_guard, que não é
+	# exportado em vários vendor kernels Android (err -2 no insmod).
+	ccflags-y += -fno-stack-protector
 else
 # normal makefile
 default:

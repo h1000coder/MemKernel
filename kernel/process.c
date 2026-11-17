@@ -1,4 +1,5 @@
 #include "process.h"
+#include "resolve.h"
 #include <linux/sched.h>
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -42,7 +43,7 @@ uintptr_t get_module_base(pid_t pid, char *name)
 		return false;
 	}
 	mm = get_task_mm(task);
-	put_task_struct(task);
+	memk_put_task_struct(task); /* evita CRC mismatch de __put_task_struct */
 	if (!mm) {
 		return false;
 	}
@@ -60,7 +61,7 @@ uintptr_t get_module_base(pid_t pid, char *name)
 		char *path_nm = "";
 
 		if (vma->vm_file) {
-			path_nm = file_path(vma->vm_file, buf, ARC_PATH_MAX - 1);
+			path_nm = memk_file_path(vma->vm_file, buf, ARC_PATH_MAX - 1); /* evita CRC mismatch */
 			if (!strcmp(kbasename(path_nm), name)) {
 				module_base = vma->vm_start;
 				break;

@@ -15,6 +15,7 @@
 #include "comm.h"
 #include "memory.h"
 #include "process.h"
+#include "resolve.h"
 
 #define DEVICE_NAME "phmeop"
 
@@ -87,7 +88,20 @@ static struct miscdevice misc = {
 int __init memkernel_entry(void)
 {
 	int ret;
+
 	printk("[+] memkernel_entry");
+
+	/*
+	 * Resolver símbolos problemáticos em tempo de execução via kprobes +
+	 * kallsyms_lookup_name.  Falhas não-fatais são logadas como warning;
+	 * cada função em memory.c tem seu próprio fallback seguro.
+	 */
+	ret = resolve_symbols();
+	if (ret < 0) {
+		pr_warn("[memkernel] symbol resolution failed (%d); some ops may not work\n", ret);
+		/* Não abortamos: misc_register pode ainda funcionar parcialmente */
+	}
+
 	ret = misc_register(&misc);
 	return ret;
 }
