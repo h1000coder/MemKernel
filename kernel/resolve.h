@@ -2,9 +2,17 @@
 #define MEMKERNEL_RESOLVE_H
 
 #include <linux/types.h>
+#include <linux/version.h>
 #include <linux/mm_types.h>
 #include <linux/pgtable.h>
 #include <asm/io.h>
+
+/* put_task_struct / struct task_struct */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/task.h>
+#else
+#include <linux/sched.h>
+#endif
 
 /*
  * Runtime symbol resolution via kprobes + kallsyms_lookup_name.
