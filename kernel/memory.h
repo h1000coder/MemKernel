@@ -3,7 +3,9 @@
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/uaccess.h>
 
-ssize_t readwrite_process_memory(pid_t pid, uintptr_t addr, void *buffer, size_t size, bool iswrite);
+ssize_t readwrite_process_memory(pid_t pid, uintptr_t addr,
+                                 void __user *buffer, size_t size, bool iswrite);
 
 #endif
