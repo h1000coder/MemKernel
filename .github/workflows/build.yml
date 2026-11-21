@@ -41,15 +41,13 @@ jobs:
           echo "=== KERNEL_SRC: $KERNEL_SRC"
           clang --version || true
 
-      - name: Patch device name
+      - name: Patch Makefile module name
         run: |
-          sed -i 's/#define DEVICE_NAME ".*"/#define DEVICE_NAME "liberdade"/' kernel/entry.c
-          sed -i 's/memkernel\.o/liberdade_memk.o/g'  kernel/Makefile
-          sed -i 's/memkernel-y/liberdade_memk-y/g'   kernel/Makefile
-          grep DEVICE_NAME kernel/entry.c
+          sed -i 's/memkernel\.o/liberdade.o/g'  kernel/Makefile
+          sed -i 's/memkernel-y/liberdade-y/g'   kernel/Makefile
           cat kernel/Makefile
 
-      - name: Build liberdade_memk.ko
+      - name: Build liberdade.ko
         run: |
           make -C "$KERNEL_SRC" \
             M="$GITHUB_WORKSPACE/kernel" \
@@ -62,23 +60,23 @@ jobs:
             CONFIG_SYSTEM_TRUSTED_KEYS="" \
             CONFIG_SYSTEM_EXTRA_CERTIFICATE="" \
             -j$(nproc)
-          ls -la kernel/liberdade_memk.ko
-          strings kernel/liberdade_memk.ko | grep vermagic
+          ls -la kernel/liberdade.ko
+          strings kernel/liberdade.ko | grep vermagic
 
       - name: Stage artifact
         run: |
           mkdir -p out
-          cp kernel/liberdade_memk.ko "out/memkernel-${{ matrix.kmi }}.ko"
+          cp kernel/liberdade.ko "out/liberdade-${{ matrix.kmi }}.ko"
           if command -v llvm-strip >/dev/null 2>&1; then
-            llvm-strip -d "out/memkernel-${{ matrix.kmi }}.ko"
+            llvm-strip -d "out/liberdade-${{ matrix.kmi }}.ko"
             echo "stripped OK"
           fi
           ls -la out/
 
-      - name: Upload memkernel-${{ matrix.kmi }}.ko
+      - name: Upload liberdade-${{ matrix.kmi }}.ko
         uses: actions/upload-artifact@v4
         with:
-          name: memkernel-${{ matrix.kmi }}.ko
-          path: out/memkernel-${{ matrix.kmi }}.ko
+          name: liberdade-${{ matrix.kmi }}.ko
+          path: out/liberdade-${{ matrix.kmi }}.ko
           if-no-files-found: error
           retention-days: 30
