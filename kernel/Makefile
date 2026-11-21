@@ -3,7 +3,8 @@ ifneq ($(KERNELRELEASE),)
     liberdade-y := memory.o process.o entry.o resolve.o
 
     ccflags-y += -fno-stack-protector
-    ccflags-y += -fno-lto
+    # Desabilita CFI por arquivo — compatível com build CFI+LTO do DDK
+    ccflags-y += -fno-sanitize=cfi
 else
 default:
     ifeq ($(KDIR),)
