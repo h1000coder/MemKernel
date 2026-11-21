@@ -1,19 +1,19 @@
 ifneq ($(KERNELRELEASE),)
-# kbuild part of makefile
-	obj-$(CONFIG_MEMKERNEL)  := memkernel.o
-	memkernel-y := memory.o process.o entry.o resolve.o
+    obj-$(CONFIG_MEMKERNEL) := memkernel.o
+    memkernel-y := memory.o process.o entry.o resolve.o
 
-	# -fno-stack-protector: evita dependência de __stack_chk_guard, que não é
-	# exportado em vários vendor kernels Android (err -2 no insmod).
-	ccflags-y += -fno-stack-protector
+    # Sem stack protector: __stack_chk_guard não exportado em vendor kernels
+    ccflags-y += -fno-stack-protector
+    # Sem LTO conflitos com inline de resolve.h
+    ccflags-y += -fno-lto
+    # Alinha ao GKI build (Clang em GKI 5.10+)
+    ccflags-y += -Wno-unused-variable
 else
-# normal makefile
 default:
-	# Assume kernel source is at KDIR or fail
-	ifeq ($(KDIR),)
-		$(error KDIR is not set. Please define KDIR to point to the kernel source directory.)
-	endif
-	make -C $(KDIR) M=$(PWD) modules
+    ifeq ($(KDIR),)
+        $(error KDIR is not set.)
+    endif
+    make -C $(KDIR) M=$(PWD) CONFIG_MEMKERNEL=m modules
 clean:
-	rm -f *.ko *.o *.mod.o *.mod.c *.symvers .*.cmd
+    rm -f *.ko *.o *.mod.o *.mod.c *.symvers .*.cmd Module.symvers modules.order
 endif
