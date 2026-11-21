@@ -15,9 +15,9 @@ struct ModuleBase {
 };
 
 enum Operations {
-    OP_READ_MEM    = 0x666,
-    OP_WRITE_MEM   = 0x777,
-    OP_MODULE_BASE = 0x999,
+    OP_READ_MEM    = 0x801,
+    OP_WRITE_MEM   = 0x802,
+    OP_MODULE_BASE = 0x803,
 };
 
 #endif
