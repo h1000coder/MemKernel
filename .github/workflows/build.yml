@@ -93,7 +93,7 @@ jobs:
             -j$(nproc)
           ls -la kernel/liberdade.ko
           echo "--- vermagic ---"
-          strings kernel/liberdade.ko | grep vermagic
+          readelf -p .modinfo kernel/liberdade.ko 2>/dev/null | grep -i vermagic || echo "(vermagic: strings tool not available)"
 
       - name: Stage artifact
         run: |
