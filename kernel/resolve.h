@@ -34,15 +34,25 @@
  */
 
 /* Tipos dos ponteiros de função */
-typedef pte_t *(*fn_pte_offset_kernel_t)(pmd_t *pmd, unsigned long address);
-typedef void  (*fn___put_task_struct_t)(struct task_struct *t);
-typedef char *(*fn_file_path_t)(struct file *f, char *buf, int buflen);
+typedef pte_t        *(*fn_pte_offset_kernel_t)(pmd_t *pmd, unsigned long address);
+typedef void          (*fn___put_task_struct_t)(struct task_struct *t);
+typedef char         *(*fn_file_path_t)(struct file *f, char *buf, int buflen);
+typedef struct mm_struct *(*fn_get_task_mm_t)(struct task_struct *task);
+typedef void          (*fn_mmput_t)(struct mm_struct *mm);
+typedef struct pid   *(*fn_find_get_pid_t)(pid_t nr);
+typedef struct task_struct *(*fn_get_pid_task_t)(struct pid *pid, enum pid_type type);
+typedef void          (*fn_put_pid_t)(struct pid *pid);
 
 /* Ponteiros resolvidos em tempo de execução */
 extern fn_pte_offset_kernel_t  k_pte_offset_kernel;
 extern void                  **k_high_memory;
 extern fn___put_task_struct_t  k___put_task_struct;
 extern fn_file_path_t          k_file_path;
+extern fn_get_task_mm_t        k_get_task_mm;
+extern fn_mmput_t              k_mmput;
+extern fn_find_get_pid_t       k_find_get_pid;
+extern fn_get_pid_task_t       k_get_pid_task;
+extern fn_put_pid_t            k_put_pid;
 
 /*
  * __nocfi: desativa a checagem de CFI (Clang Control Flow Integrity) para
@@ -117,6 +127,51 @@ static MEMK_NOCFI inline char *memk_file_path(struct file *f, char *buf, int buf
 	if (buflen > 0)
 		buf[0] = '\0';
 	return buf;
+}
+
+/*
+ * Os símbolos abaixo têm CRC mismatch em vendor kernels que modificam
+ * task_struct ou mm_struct (comum em Qualcomm e MediaTek). Resolvendo
+ * via kallsyms o linker não inclui o CRC deles no .ko, eliminando o erro
+ * "disagrees about version of symbol X" no insmod.
+ */
+
+static MEMK_NOCFI inline struct mm_struct *memk_get_task_mm(struct task_struct *task)
+{
+	if (k_get_task_mm)
+		return k_get_task_mm(task);
+	return get_task_mm(task);
+}
+
+static MEMK_NOCFI inline void memk_mmput(struct mm_struct *mm)
+{
+	if (k_mmput)
+		k_mmput(mm);
+	else
+		mmput(mm);
+}
+
+static MEMK_NOCFI inline struct pid *memk_find_get_pid(pid_t nr)
+{
+	if (k_find_get_pid)
+		return k_find_get_pid(nr);
+	return find_get_pid(nr);
+}
+
+static MEMK_NOCFI inline struct task_struct *memk_get_pid_task(struct pid *pid,
+							       enum pid_type type)
+{
+	if (k_get_pid_task)
+		return k_get_pid_task(pid, type);
+	return get_pid_task(pid, type);
+}
+
+static MEMK_NOCFI inline void memk_put_pid(struct pid *pid)
+{
+	if (k_put_pid)
+		k_put_pid(pid);
+	else
+		put_pid(pid);
 }
 
 #endif /* MEMKERNEL_RESOLVE_H */

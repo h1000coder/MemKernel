@@ -35,16 +35,28 @@ static long dispatch_ioctl(struct file *const file, unsigned int const cmd,
     case OP_READ_MEM:
         if (copy_from_user(&cm, (void __user *)arg, sizeof(cm)) != 0)
             return -EFAULT;
+        if (cm.size == 0 || cm.size > MEMK_MAX_RW_SIZE)
+            return -EINVAL;
+        if (!access_ok(cm.buffer, cm.size))
+            return -EFAULT;
         return readwrite_process_memory(cm.pid, cm.addr, cm.buffer, cm.size, false);
 
     case OP_WRITE_MEM:
         if (copy_from_user(&cm, (void __user *)arg, sizeof(cm)) != 0)
             return -EFAULT;
+        if (cm.size == 0 || cm.size > MEMK_MAX_RW_SIZE)
+            return -EINVAL;
+        if (!access_ok(cm.buffer, cm.size))
+            return -EFAULT;
         return readwrite_process_memory(cm.pid, cm.addr, cm.buffer, cm.size, true);
 
     case OP_MODULE_BASE:
-        if (copy_from_user(&mb, (void __user *)arg, sizeof(mb)) != 0 ||
-            copy_from_user(name, (void __user *)mb.name, sizeof(name) - 1) != 0)
+        if (copy_from_user(&mb, (void __user *)arg, sizeof(mb)) != 0)
+            return -EFAULT;
+        /* mb.name é um ponteiro userspace; validar antes de desreferenciar */
+        if (!mb.name || !access_ok((void __user *)mb.name, 1))
+            return -EFAULT;
+        if (copy_from_user(name, (void __user *)mb.name, sizeof(name) - 1) != 0)
             return -EFAULT;
         mb.base = get_module_base(mb.pid, name);
         if (copy_to_user((void __user *)arg, &mb, sizeof(mb)) != 0)

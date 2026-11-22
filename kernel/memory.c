@@ -7,6 +7,7 @@
 #include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/highmem.h>
+#include <linux/vmalloc.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -27,11 +28,15 @@
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
-# define MEMK_MAP(pg)          kmap_local_page(pg)
-# define MEMK_UNMAP_ADDR(addr) kunmap_local(addr)
+# define MEMK_MAP_PAGE(pg)      kmap_local_page(pg)
+# define MEMK_UNMAP_PAGE(pg, addr) kunmap_local(addr)
 #else
-# define MEMK_MAP(pg)          kmap(pg)
-# define MEMK_UNMAP_ADDR(addr) kunmap(pg)
+/*
+ * kmap/kunmap: kunmap precisa da struct page, não do endereço virtual.
+ * Passamos ambos explicitamente para evitar captura implícita de variáveis.
+ */
+# define MEMK_MAP_PAGE(pg)      kmap(pg)
+# define MEMK_UNMAP_PAGE(pg, addr) kunmap(pg)
 #endif
 
 /*
@@ -96,7 +101,12 @@ static phys_addr_t translate_linear_address(struct mm_struct *mm, uintptr_t va)
     if (pmd_bad(*pmd))
         return 0;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+/*
+ * pte_offset_map_lock + pte_unmap_unlock são obrigatórios em 5.15+
+ * para acessar PTEs de espaço de usuário sem causar panic.
+ * A API existe desde 5.8, então usamos ela para todo kernel >= 5.8.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
     {
         spinlock_t *ptl;
         pte_t *pte = pte_offset_map_lock(mm, pmd, va, &ptl);
@@ -135,8 +145,37 @@ static size_t rw_physical_page(phys_addr_t pa, void __user *ubuf,
     if (!pfn_valid(pfn))
         return 0;
 
-    pg    = pfn_to_page(pfn);
-    kaddr = MEMK_MAP(pg);
+    /*
+     * Rejeita páginas reservadas (MMIO, firmware, buracos de memória).
+     * PageReserved() = true para páginas fora da RAM gerenciável;
+     * acessá-las via kmap pode causar data abort em ARM64.
+     */
+    pg = pfn_to_page(pfn);
+    if (PageReserved(pg))
+        return 0;
+
+    /*
+     * Tenta vmap primeiro: cria um mapeamento virtual explícito com
+     * PAGE_KERNEL, garantindo os atributos de cache corretos em ARM64
+     * (device com configurações não-padrão de cacheline, big.LITTLE, etc.).
+     * É mais confiável que kmap em kernels GKI 5.10+ onde kmap_local_page
+     * pode ter restrições de contexto ou flags inesperadas de alguns vendors.
+     */
+    kaddr = vmap(&pg, 1, VM_MAP, PAGE_KERNEL);
+    if (kaddr) {
+        if (iswrite)
+            err = copy_from_user(kaddr + offset, ubuf, size);
+        else
+            err = copy_to_user(ubuf, kaddr + offset, size);
+        vunmap(kaddr);
+        return err ? 0 : size;
+    }
+
+    /*
+     * Fallback para kmap/kmap_local_page se vmap falhar
+     * (memória insuficiente no vmalloc space, raro mas possível).
+     */
+    kaddr = MEMK_MAP_PAGE(pg);
     if (!kaddr)
         return 0;
 
@@ -145,7 +184,7 @@ static size_t rw_physical_page(phys_addr_t pa, void __user *ubuf,
     else
         err = copy_to_user(ubuf, kaddr + offset, size);
 
-    MEMK_UNMAP_ADDR(kaddr);
+    MEMK_UNMAP_PAGE(pg, kaddr);
     return err ? 0 : size;
 }
 
@@ -160,16 +199,16 @@ ssize_t readwrite_process_memory(pid_t pid, uintptr_t addr,
     if (size == 0 || !buffer)
         return -EINVAL;
 
-    pid_struct = find_get_pid(pid);
+    pid_struct = memk_find_get_pid(pid);
     if (!pid_struct)
         return -ESRCH;
 
-    task = get_pid_task(pid_struct, PIDTYPE_PID);
-    put_pid(pid_struct);
+    task = memk_get_pid_task(pid_struct, PIDTYPE_PID);
+    memk_put_pid(pid_struct);
     if (!task)
         return -ESRCH;
 
-    mm = get_task_mm(task);
+    mm = memk_get_task_mm(task);
     memk_put_task_struct(task);
     if (!mm)
         return -ESRCH;
@@ -197,7 +236,7 @@ ssize_t readwrite_process_memory(pid_t pid, uintptr_t addr,
         count += written;
     }
     MM_READ_UNLOCK(mm);
-    mmput(mm);
+    memk_mmput(mm);
 
     return count > 0 ? (ssize_t)count : -1;
 }

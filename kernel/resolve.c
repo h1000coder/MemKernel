@@ -31,6 +31,11 @@ fn_pte_offset_kernel_t  k_pte_offset_kernel  = NULL;
 void                  **k_high_memory        = NULL;
 fn___put_task_struct_t  k___put_task_struct  = NULL;
 fn_file_path_t          k_file_path          = NULL;
+fn_get_task_mm_t        k_get_task_mm        = NULL;
+fn_mmput_t              k_mmput              = NULL;
+fn_find_get_pid_t       k_find_get_pid       = NULL;
+fn_get_pid_task_t       k_get_pid_task       = NULL;
+fn_put_pid_t            k_put_pid            = NULL;
 
 /* ------------------------------------------------------------------ */
 /* Obter kallsyms_lookup_name via kprobe                               */
@@ -41,21 +46,25 @@ static kallsyms_lookup_name_fn my_kallsyms_lookup_name = NULL;
 
 static int get_kallsyms_lookup_name(void)
 {
+	/* Já resolvido — não reregistrar o kprobe */
+	if (my_kallsyms_lookup_name)
+		return 0;
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
 	/*
 	 * Antes do 5.7 o símbolo ainda é exportado — usamos direto.
-	 * Declaramos extern aqui para evitar header de um símbolo não-exportado
-	 * que cause warning no host de compilação cruzada.
 	 */
 	extern unsigned long kallsyms_lookup_name(const char *name);
 	my_kallsyms_lookup_name = (kallsyms_lookup_name_fn)kallsyms_lookup_name;
 	return 0;
 #else
 	/*
-	 * 5.7+: registramos um kprobe no símbolo; após register_kprobe()
-	 * bem-sucedido, kp.addr aponta para o início da função no kernel.
+	 * 5.7+: registramos um kprobe temporário para obter o endereço.
+	 * Alocamos na stack (não static) para garantir estado limpo em cada
+	 * chamada — um kprobe static parcialmente inicializado após
+	 * unregister_kprobe pode causar -EINVAL em reuso.
 	 */
-	static struct kprobe kp = {
+	struct kprobe kp = {
 		.symbol_name = "kallsyms_lookup_name",
 	};
 	int ret;
@@ -135,6 +144,32 @@ static void resolve_file_path(void)
 	}
 }
 
+/*
+ * get_task_mm / mmput / find_get_pid / get_pid_task / put_pid:
+ * Em vendor kernels (Qualcomm, MediaTek) que modificam task_struct ou mm_struct,
+ * o CRC desses símbolos diverge e o insmod falha com err -22.
+ * Resolvendo via kallsyms o CRC não entra no .ko.
+ */
+#define RESOLVE_SYM(var, type, name)                                        \
+	do {                                                                \
+		unsigned long _a = my_kallsyms_lookup_name(name);           \
+		if (_a) {                                                   \
+			var = (type)_a;                                     \
+			pr_info("[memkernel] " name " resolved @ %lx\n", _a); \
+		} else {                                                    \
+			pr_warn("[memkernel] " name " not in kallsyms — using export\n"); \
+		}                                                           \
+	} while (0)
+
+static void resolve_mm_symbols(void)
+{
+	RESOLVE_SYM(k_get_task_mm,  fn_get_task_mm_t,   "get_task_mm");
+	RESOLVE_SYM(k_mmput,        fn_mmput_t,          "mmput");
+	RESOLVE_SYM(k_find_get_pid, fn_find_get_pid_t,   "find_get_pid");
+	RESOLVE_SYM(k_get_pid_task, fn_get_pid_task_t,   "get_pid_task");
+	RESOLVE_SYM(k_put_pid,      fn_put_pid_t,        "put_pid");
+}
+
 /* ------------------------------------------------------------------ */
 /* Ponto de entrada                                                     */
 /* ------------------------------------------------------------------ */
@@ -157,6 +192,7 @@ int resolve_symbols(void)
 	resolve_high_memory();
 	resolve___put_task_struct();
 	resolve_file_path();
+	resolve_mm_symbols();
 
 	return 0;
 }

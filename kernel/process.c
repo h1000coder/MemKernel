@@ -33,17 +33,17 @@ uintptr_t get_module_base(pid_t pid, char *name)
 #endif
 	uintptr_t module_base = 0;
 
-	pid_struct = find_get_pid(pid);
+	pid_struct = memk_find_get_pid(pid);
 	if (!pid_struct) {
 		return false;
 	}
-	task = get_pid_task(pid_struct, PIDTYPE_PID);
-	put_pid(pid_struct);
+	task = memk_get_pid_task(pid_struct, PIDTYPE_PID);
+	memk_put_pid(pid_struct);
 	if (!task) {
 		return false;
 	}
-	mm = get_task_mm(task);
-	memk_put_task_struct(task); /* evita CRC mismatch de __put_task_struct */
+	mm = memk_get_task_mm(task);
+	memk_put_task_struct(task);
 	if (!mm) {
 		return false;
 	}
@@ -70,6 +70,6 @@ uintptr_t get_module_base(pid_t pid, char *name)
 	}
 
 	MM_READ_UNLOCK(mm);
-	mmput(mm);
+	memk_mmput(mm);
 	return module_base;
 }
