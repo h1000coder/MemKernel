@@ -5,6 +5,10 @@ ifneq ($(KERNELRELEASE),)
     ccflags-y += -fno-stack-protector
     # Desabilita CFI por arquivo — compatível com build CFI+LTO do DDK
     ccflags-y += -fno-sanitize=cfi
+    # Zera o vermagic para permitir insmod em qualquer kernel compatível
+    # sem precisar que a string de versão bata exatamente
+    override VERMAGIC :=
+    ccflags-y += -DVERMAGIC_STRING=\"\"
 else
 default:
     ifeq ($(KDIR),)
