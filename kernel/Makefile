@@ -5,6 +5,8 @@ ifneq ($(KERNELRELEASE),)
     ccflags-y += -fno-stack-protector
     # Desabilita CFI por arquivo — compatível com build CFI+LTO do DDK
     ccflags-y += -fno-sanitize=cfi
+    # android16-6.12 DDK tem bug em signal.h inline que dispara Warray-bounds
+    ccflags-y += -Wno-array-bounds
     # Zera o vermagic para permitir insmod em qualquer kernel compatível
     # sem precisar que a string de versão bata exatamente
     override VERMAGIC :=
