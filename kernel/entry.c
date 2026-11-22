@@ -83,7 +83,7 @@ static struct miscdevice misc = {
     .mode  = 0666,
 };
 
-int __init memkernel_entry(void)
+static int __init memkernel_entry(void)
 {
     int ret;
 
@@ -99,7 +99,7 @@ int __init memkernel_entry(void)
     return ret;
 }
 
-void __exit memkernel_unload(void)
+static void __exit memkernel_unload(void)
 {
     misc_deregister(&misc);
     pr_info("[memkernel] unloaded\n");
