@@ -4,20 +4,20 @@ on:
   workflow_dispatch:
     inputs:
       ddk_release:
-        description: 'DDK image tag suffix (release date)'
+        description: 'DDK date (ex: 20251104). Deixe vazio para buildar todas as datas conhecidas.'
         required: false
-        default: '20251104'
+        default: ''
         type: string
 
 jobs:
   build:
-    name: build ${{ matrix.kmi }}
+    name: build ${{ matrix.kmi }} @ ${{ matrix.ddk_date }}
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-          kmi:
+        kmi:
           - android12-5.10
           - android13-5.10
           - android13-5.15
@@ -25,10 +25,29 @@ jobs:
           - android14-6.1
           - android15-6.6
           - android16-6.12
+        # Datas de DDK mais comuns em dispositivos no mercado.
+        # Cada par kmi+date produz um .ko com vermagic diferente —
+        # o device aceita o .ko cujo vermagic bate com o kernel instalado.
+        ddk_date:
+          - '20240101'
+          - '20240901'
+          - '20241101'
+          - '20250101'
+          - '20250901'
+          - '20251104'
+        exclude:
+          # android16-6.12 é recente; imagens DDK antigas podem não existir
+          - kmi: android16-6.12
+            ddk_date: '20240101'
+          - kmi: android16-6.12
+            ddk_date: '20240901'
 
     container:
-      image: ghcr.io/ylarod/ddk:${{ matrix.kmi }}-${{ inputs.ddk_release || '20251104' }}
+      image: ghcr.io/ylarod/ddk:${{ matrix.kmi }}-${{ inputs.ddk_release || matrix.ddk_date }}
       options: --privileged
+
+    # Se a imagem DDK não existir para esse par, pula sem falhar o job inteiro
+    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +55,7 @@ jobs:
       - name: Show build environment
         run: |
           echo "=== KMI:        ${{ matrix.kmi }}"
+          echo "=== DDK date:   ${{ inputs.ddk_release || matrix.ddk_date }}"
           echo "=== KERNEL_SRC: $KERNEL_SRC"
           clang --version || true
 
@@ -51,6 +71,7 @@ jobs:
             M="$GITHUB_WORKSPACE/kernel" \
             ARCH=arm64 \
             CONFIG_MEMKERNEL=m \
+            CONFIG_KPROBES=y \
             CONFIG_LOCALVERSION="" \
             CONFIG_MODULE_SIG=n \
             CONFIG_MODULE_SIG_FORCE=n \
@@ -59,22 +80,24 @@ jobs:
             CONFIG_SYSTEM_EXTRA_CERTIFICATE="" \
             -j$(nproc)
           ls -la kernel/liberdade.ko
+          echo "--- vermagic ---"
           strings kernel/liberdade.ko | grep vermagic
 
       - name: Stage artifact
         run: |
           mkdir -p out
-          cp kernel/liberdade.ko "out/liberdade-${{ matrix.kmi }}.ko"
+          DATE="${{ inputs.ddk_release || matrix.ddk_date }}"
+          cp kernel/liberdade.ko "out/liberdade-${{ matrix.kmi }}-${DATE}.ko"
           if command -v llvm-strip >/dev/null 2>&1; then
-            llvm-strip -d "out/liberdade-${{ matrix.kmi }}.ko"
+            llvm-strip -d "out/liberdade-${{ matrix.kmi }}-${DATE}.ko"
             echo "stripped OK"
           fi
           ls -la out/
 
-      - name: Upload liberdade-${{ matrix.kmi }}.ko
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: liberdade-${{ matrix.kmi }}.ko
-          path: out/liberdade-${{ matrix.kmi }}.ko
+          name: liberdade-${{ matrix.kmi }}-${{ inputs.ddk_release || matrix.ddk_date }}.ko
+          path: out/liberdade-${{ matrix.kmi }}-${{ inputs.ddk_release || matrix.ddk_date }}.ko
           if-no-files-found: error
           retention-days: 30
