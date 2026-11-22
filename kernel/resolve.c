@@ -44,30 +44,34 @@ fn_put_pid_t            k_put_pid            = NULL;
 typedef unsigned long (*kallsyms_lookup_name_fn)(const char *name);
 static kallsyms_lookup_name_fn my_kallsyms_lookup_name = NULL;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
+/* Exportado até 5.6; a partir do 5.7 não é mais EXPORT_SYMBOL */
+extern unsigned long kallsyms_lookup_name(const char *name);
+#endif
+
 static int get_kallsyms_lookup_name(void)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+	/* Declarações no topo — C89 não permite declarar após código */
+	struct kprobe kp;
+	int ret;
+#endif
+
 	/* Já resolvido — não reregistrar o kprobe */
 	if (my_kallsyms_lookup_name)
 		return 0;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
-	/*
-	 * Antes do 5.7 o símbolo ainda é exportado — usamos direto.
-	 */
-	extern unsigned long kallsyms_lookup_name(const char *name);
+	/* Antes do 5.7 o símbolo ainda é exportado — usamos direto. */
 	my_kallsyms_lookup_name = (kallsyms_lookup_name_fn)kallsyms_lookup_name;
 	return 0;
 #else
 	/*
 	 * 5.7+: registramos um kprobe temporário para obter o endereço.
-	 * Alocamos na stack (não static) para garantir estado limpo em cada
-	 * chamada — um kprobe static parcialmente inicializado após
-	 * unregister_kprobe pode causar -EINVAL em reuso.
+	 * Inicializamos aqui (não na declaração) pois a declaração ficou no topo.
 	 */
-	struct kprobe kp = {
-		.symbol_name = "kallsyms_lookup_name",
-	};
-	int ret;
+	memset(&kp, 0, sizeof(kp));
+	kp.symbol_name = "kallsyms_lookup_name";
 
 	ret = register_kprobe(&kp);
 	if (ret < 0) {

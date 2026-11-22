@@ -10,6 +10,7 @@
 /* put_task_struct / struct task_struct */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/task.h>
+#include <linux/sched/mm.h>   /* get_task_mm, mmput */
 #else
 #include <linux/sched.h>
 #endif
