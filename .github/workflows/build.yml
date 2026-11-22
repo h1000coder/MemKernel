@@ -25,22 +25,32 @@ jobs:
           - android14-6.1
           - android15-6.6
           - android16-6.12
-        # Datas de DDK mais comuns em dispositivos no mercado.
+          - android17-6.18
+        # Datas reais disponíveis em ghcr.io/ylarod/ddk (verificadas em nov/2026).
         # Cada par kmi+date produz um .ko com vermagic diferente —
         # o device aceita o .ko cujo vermagic bate com o kernel instalado.
         ddk_date:
-          - '20240101'
-          - '20240901'
-          - '20241101'
-          - '20250101'
-          - '20250901'
-          - '20251104'
+          - '20250825'   # v3-era
+          - '20251007'   # v3
+          - '20251016'   # v4
+          - '20251104'   # v5
+          - '20260313'   # v6
+          - '20260828'   # v7
         exclude:
-          # android16-6.12 é recente; imagens DDK antigas podem não existir
-          - kmi: android16-6.12
-            ddk_date: '20240101'
-          - kmi: android16-6.12
-            ddk_date: '20240901'
+          # android12-5.10 não tem tag 20251016
+          - kmi: android12-5.10
+            ddk_date: '20251016'
+          # android17-6.18 só existe na data mais recente
+          - kmi: android17-6.18
+            ddk_date: '20250825'
+          - kmi: android17-6.18
+            ddk_date: '20251007'
+          - kmi: android17-6.18
+            ddk_date: '20251016'
+          - kmi: android17-6.18
+            ddk_date: '20251104'
+          - kmi: android17-6.18
+            ddk_date: '20260313'
 
     container:
       image: ghcr.io/ylarod/ddk:${{ matrix.kmi }}-${{ inputs.ddk_release || matrix.ddk_date }}
