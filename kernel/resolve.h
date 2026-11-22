@@ -11,6 +11,7 @@
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/task.h>
 #include <linux/sched/mm.h>   /* get_task_mm, mmput */
+#include <linux/pid.h>        /* find_get_pid, get_pid_task, put_pid */
 #else
 #include <linux/sched.h>
 #endif
